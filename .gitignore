@@ -20,3 +20,6 @@ tmp/
 # Snakemake
 .snakemake/
 logs/
+
+# Python
+__pycache__/

@@ -1,0 +1,64 @@
+R version 4.5.3 (2026-03-11)
+Platform: x86_64-conda-linux-gnu
+Running under: Ubuntu 26.04.1 LTS
+
+Matrix products: default
+BLAS/LAPACK: /home/arlindo/github/private/proteomics/.snakemake/conda/83093a17c497276d75c7b9aab86f783e_/lib/libopenblasp-r0.3.34.so;  LAPACK version 3.12.0
+
+locale:
+ [1] LC_CTYPE=pt_BR.UTF-8       LC_NUMERIC=C              
+ [3] LC_TIME=pt_BR.UTF-8        LC_COLLATE=pt_BR.UTF-8    
+ [5] LC_MONETARY=pt_BR.UTF-8    LC_MESSAGES=pt_BR.UTF-8   
+ [7] LC_PAPER=pt_BR.UTF-8       LC_NAME=C                 
+ [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+[11] LC_MEASUREMENT=pt_BR.UTF-8 LC_IDENTIFICATION=C       
+
+time zone: America/Sao_Paulo
+tzcode source: system (glibc)
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods  
+[8] base     
+
+other attached packages:
+ [1] yaml_2.3.12            DOSE_4.4.0             enrichplot_1.30.5     
+ [4] org.Mm.eg.db_3.22.0    AnnotationDbi_1.72.0   IRanges_2.44.0        
+ [7] S4Vectors_0.48.1       Biobase_2.70.0         BiocGenerics_0.56.0   
+[10] generics_0.1.4         clusterProfiler_4.18.4 EnhancedVolcano_1.28.2
+[13] pheatmap_1.0.13        ggrepel_0.9.8          ggplot2_4.0.4         
+[16] tidyr_1.3.2            dplyr_1.2.1            limma_3.68.5          
+
+loaded via a namespace (and not attached):
+ [1] DBI_1.3.0               gson_0.2.2              gridExtra_2.3.1        
+ [4] rlang_1.3.0             magrittr_2.0.5          otel_0.2.0             
+ [7] ggridges_0.5.7          compiler_4.5.3          RSQLite_3.53.3         
+[10] png_0.1-9               systemfonts_1.3.2       vctrs_0.7.3            
+[13] reshape2_1.4.5          stringr_1.6.0           pkgconfig_2.0.3        
+[16] crayon_1.5.3            fastmap_1.2.0           XVector_0.50.0         
+[19] labeling_0.4.3          purrr_1.2.2             bit_4.6.0              
+[22] cachem_1.1.0            aplot_0.3.2             jsonlite_2.0.0         
+[25] blob_1.3.0              tidydr_0.0.7            BiocParallel_1.44.0    
+[28] tweenr_2.0.3            cluster_2.1.8.3         parallel_4.5.3         
+[31] R6_2.6.1                stringi_1.8.9           RColorBrewer_1.1-3     
+[34] GOSemSim_2.36.0         Rcpp_1.1.2              Seqinfo_1.0.0          
+[37] ggtangle_0.1.4          R.utils_2.13.0          Matrix_1.7-6           
+[40] splines_4.5.3           igraph_2.3.4            tidyselect_1.2.1       
+[43] qvalue_2.42.0           codetools_0.2-20        lattice_0.23-1         
+[46] tibble_3.3.1            plyr_1.8.9              treeio_1.34.0          
+[49] withr_3.0.3             KEGGREST_1.50.0         S7_0.2.2               
+[52] gridGraphics_0.5-1      scatterpie_0.2.6        polyclip_1.10-7        
+[55] Biostrings_2.78.0       pillar_1.11.1           ggtree_4.0.5           
+[58] ggfun_0.2.2             scales_1.4.0            tidytree_0.4.9         
+[61] glue_1.8.1              gdtools_0.6.0           lazyeval_0.2.3         
+[64] tools_4.5.3             ggnewscale_0.5.2        data.table_1.18.6.1    
+[67] fgsea_1.36.2            ggiraph_0.9.6           fs_2.1.0               
+[70] fastmatch_1.1-8         cowplot_1.2.0           grid_4.5.3             
+[73] ape_5.8-1               nlme_3.1-170            patchwork_1.3.2        
+[76] ggforce_0.5.0           cli_3.6.6               rappdirs_0.3.4         
+[79] fontBitstreamVera_0.1.1 gtable_0.3.6            R.methodsS3_1.8.2      
+[82] yulab.utils_0.2.5       digest_0.6.39           fontquiver_0.2.1       
+[85] ggplotify_0.1.4         htmlwidgets_1.6.4       farver_2.1.2           
+[88] memoise_2.0.1           htmltools_0.5.9         R.oo_1.27.1            
+[91] lifecycle_1.0.5         httr_1.4.9              GO.db_3.22.0           
+[94] statmod_1.5.2           fontLiberation_0.1.0    bit64_4.8.6            
+[97] MASS_7.3-66            

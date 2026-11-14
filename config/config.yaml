@@ -1,13 +1,23 @@
 # Parameters for the ACT vs Sham hippocampal proteomics analysis.
 # Paths are relative to the project root (proteomics/).
 
+dataset: ijms-730741
+title: "Hippocampus proteome (McElroy et al. 2020)"
+
+groups:
+  reference: Sham
+  treatment: ACT
+  colors:
+    Sham: "#3399FF"
+    ACT: "#CC0000"
+
 data:
   raw_xlsx: data/ijms-730741-SI.xlsx     # supplementary file (Table S1, raw iBAQ)
   processed: data/processed.csv          # output of scripts/prepare.sh, input of the R script
 
 results_dir: results                     # CSV tables
 plots_dir: plots                         # PDF + PNG figures
-reports_dir: reports                     # HTML report
+reports_dir: reports                     # report.html and sessionInfo.txt
 
 seed: 42                                 # imputation and GSEA permutations
 

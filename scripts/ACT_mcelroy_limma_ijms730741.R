@@ -37,7 +37,7 @@ plots_dir   <- cfg$plots_dir
 set.seed(cfg$seed)                # imputation is stochastic
 options(scipen = 0)
 palette(c("#3399FF", "#CC0000", "#66A61E"))
-group_colors <- c(Sham = "#3399FF", ACT = "#CC0000")
+group_colors <- unlist(cfg$groups$colors)    # Sham blue, ACT red (as in bulk-rna-seq)
 
 dir.create(results_dir, showWarnings = FALSE)   # tables
 dir.create(plots_dir, showWarnings = FALSE)     # figures
@@ -52,7 +52,7 @@ save <- function(table, file_name) {
 save_plot <- function(plot, file_name, width = 7, height = 6) {
   ggsave(file.path(plots_dir, file_name), plot, width = width, height = height)
   ggsave(file.path(plots_dir, sub("\\.pdf$", ".png", file_name)), plot,
-         width = width, height = height, dpi = 120)
+         width = width, height = height, dpi = 150)
 }
 
 # Same for base-graphics plots: `code` is evaluated once per device
@@ -61,7 +61,7 @@ save_base <- function(file_name, width, height, code) {
   pdf(file.path(plots_dir, file_name), width = width, height = height)
   eval(code, env); invisible(dev.off())
   png(file.path(plots_dir, sub("\\.pdf$", ".png", file_name)),
-      width = width, height = height, units = "in", res = 120)
+      width = width, height = height, units = "in", res = 150)
   eval(code, env); invisible(dev.off())
 }
 
@@ -124,6 +124,7 @@ impute_minprob <- function(m, shift = 1.8, width = 0.3) {
 log_imp <- impute_minprob(log_norm, shift = cfg$preprocessing$impute_shift,
                           width = cfg$preprocessing$impute_width)
 
+# <figure name="density_preprocessing">
 ## Densities before / after normalization and imputation
 long <- function(m, stage) data.frame(m, check.names = FALSE) %>%
   pivot_longer(everything(), names_to = "sample", values_to = "log2_iBAQ") %>%
@@ -135,7 +136,9 @@ dens <- bind_rows(long(log_filt, "1 filtered"), long(log_norm, "2 normalized"),
 p_dens <- ggplot(dens, aes(log2_iBAQ, colour = sample, linetype = group)) +
   geom_density() + facet_wrap(~stage, ncol = 1) + theme_bw()
 save_plot(p_dens, "density_preprocessing.pdf", height = 8)
+# </figure>
 
+# <figure name="boxplot_normalized">
 ## Boxplot after normalization (before imputation)
 p_box <- long(log_norm, "normalized") %>% filter(!is.na(log2_iBAQ)) %>%
   mutate(group = sub("_.*", "", sample)) %>%
@@ -143,17 +146,27 @@ p_box <- long(log_norm, "normalized") %>% filter(!is.na(log2_iBAQ)) %>%
   scale_fill_manual(values = group_colors) + theme_bw() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 save_plot(p_box, "boxplot_normalized.pdf")
+# </figure>
 
-## PCA of samples (imputed matrix)
-pca <- prcomp(t(log_imp), scale. = FALSE)
+## Batch-corrected matrix, for visualization only (PCA, heatmap). The DE model does not use it:
+## it keeps the raw matrix and estimates the batch as a term (`~ 0 + group + batch`).
+## `design` protects the group effect from being removed together with the batch.
+log_bc <- removeBatchEffect(log_imp, batch = metadata$batch,
+                            design = model.matrix(~ group, data = metadata))
+
+# <figure name="pca">
+## PCA of samples (imputed, batch-corrected matrix)
+pca <- prcomp(t(log_bc), scale. = FALSE)
 var_expl <- round(100 * pca$sdev^2 / sum(pca$sdev^2), 1)
 pca_df <- cbind(metadata, pca$x[, 1:3])
 p_pca <- ggplot(pca_df, aes(PC1, PC2, colour = group, shape = batch, label = sample)) +
   geom_point(size = 4) + geom_text_repel(show.legend = FALSE) +
   scale_colour_manual(values = group_colors) +
-  labs(x = paste0("PC1 (", var_expl[1], "%)"), y = paste0("PC2 (", var_expl[2], "%)")) +
+  labs(x = paste0("PC1 (", var_expl[1], "%)"), y = paste0("PC2 (", var_expl[2], "%)"),
+       title = "PCA, batch-corrected (removeBatchEffect)") +
   theme_bw()
 save_plot(p_pca, "pca.pdf")
+# </figure>
 print(var_expl[1:4])
 
 ######################## Differential expression ########################
@@ -209,6 +222,7 @@ cat("DE proteins robust without imputation:", sum(tt$robust_noimp), "of", sum(tt
 cat("No-imputation fit alone -", sig_col, "<", sig_cutoff, ":",
     sum(tt_noimp[[sig_col]] < sig_cutoff & abs(tt_noimp$logFC) > fc_cutoff, na.rm = TRUE), "proteins\n")
 
+# <figure name="sensitivity_imputation_logFC">
 p_sens <- ggplot(tt, aes(logFC, noimp_logFC, colour = robust_noimp)) +
   geom_abline(colour = "grey") + geom_point(alpha = 0.4, size = 1) +
   geom_text_repel(data = subset(tt, status != "NS"), aes(label = SYMBOL), size = 2.5,
@@ -217,60 +231,85 @@ p_sens <- ggplot(tt, aes(logFC, noimp_logFC, colour = robust_noimp)) +
   labs(x = "log2FC (imputed)", y = "log2FC (no imputation)", colour = "DE robust\nwithout imputation") +
   theme_bw()
 save_plot(p_sens, "sensitivity_imputation_logFC.pdf", width = 8, height = 7)
+# </figure>
 
 save(tt, "ACT_vs_Sham_limma_all")
 save(rbind(tt_up, tt_down), "ACT_vs_Sham_limma_DE")
 
 ######################## Visualization ########################
-## Volcano plot
-p_volc <- EnhancedVolcano(tt,
-  lab = tt$SYMBOL, x = "logFC", y = sig_col,
-  pCutoff = sig_cutoff, FCcutoff = fc_cutoff,
-  ylab = bquote(~-Log[10] ~ .(sig_col)),
-  xlab = bquote(~Log[2] ~ "fold change (ACT / Sham)"),
-  title = "Hippocampal proteome: ACT vs Sham",
-  subtitle = paste0("limma; ", sig_col, " < ", sig_cutoff, ", |log2FC| > ", fc_cutoff),
-  caption = paste("Total proteins:", nrow(tt)),
-  pointSize = 2, labSize = 3, colAlpha = 0.5,
-  col = c("gray", "#3399FF", "#009933", "#CC0000"),
-  legendLabels = c("NS", "Log2FC", sig_col, paste(sig_col, "& Log2FC")),
-  drawConnectors = TRUE, widthConnectors = 0.3, max.overlaps = 30)
-save_plot(p_volc, "volcano.pdf", width = 9, height = 8)
+# <figure name="volcano">
+# Volcano plot: Up = red, Down = blue, NS = gray (same scheme as bulk-rna-seq)
+keyvals <- ifelse(tt$status == "Up", "#CC0000", ifelse(tt$status == "Down", "#3399FF", "gray"))
+names(keyvals) <- ifelse(keyvals == "#CC0000", "Up", ifelse(keyvals == "#3399FF", "Down", "NS"))
+sig_label <- if (sig_col == "adj.P.Val") "FDR" else "P"
 
-## Heatmap of the differentially abundant proteins (row-scaled)
+p_volc <- EnhancedVolcano(tt,
+                          lab = tt$SYMBOL,
+                          x = "logFC",
+                          y = sig_col,
+                          xlab = bquote(~Log[2] ~ "fold change"),
+                          ylab = bquote(~-Log[10] ~ .(sig_label)),
+                          title = cfg$title,
+                          subtitle = "ACT vs Sham",
+                          caption = paste("Total proteins:", nrow(tt)),
+                          pCutoff = sig_cutoff,
+                          FCcutoff = fc_cutoff,
+                          pointSize = 1.0,
+                          labSize = 3,
+                          colCustom = keyvals,
+                          colAlpha = 0.5,
+                          legendLabSize = 7,
+                          legendIconSize = 7,
+                          drawConnectors = TRUE,
+                          widthConnectors = 0.3,
+                          max.overlaps = 15)
+save_plot(p_volc, "volcano.pdf", width = 8, height = 7)
+# </figure>
+
+# <figure name="heatmap_DE">
+## Heatmap of the differentially abundant proteins (batch-corrected, row-scaled)
 top_ids <- c(tt_up$Protein, tt_down$Protein)
-hm <- log_imp[top_ids, ]
+hm <- log_bc[top_ids, ]
 rownames(hm) <- make.unique(tt$SYMBOL[match(top_ids, tt$Protein)])
 save_base("heatmap_DE.pdf", width = 6, height = max(5, 0.15 * length(top_ids) + 2), {
   print(pheatmap(hm, scale = "row", cluster_cols = FALSE, silent = TRUE,
                  annotation_col = metadata[, c("group", "batch")],
                  annotation_colors = list(group = group_colors),
-                 main = paste0("DE proteins (", sig_col, " < ", sig_cutoff, ")")))
+                 main = paste0("DE proteins (", sig_col, " < ", sig_cutoff, "), batch-corrected")))
 })
+# </figure>
 
+# <figure name="pvalue_histogram">
 ## P value / FDR histogram
 save_base("pvalue_histogram.pdf", width = 8, height = 4, {
   par(mfrow = c(1, 2))
   hist(tt$P.Value, breaks = 50, col = "grey", main = "P value", xlab = "P")
   hist(tt$adj.P.Val, breaks = 50, col = "grey", main = "FDR (BH)", xlab = "adj. P")
 })
+# </figure>
 
+# <figure name="qq_t">
 ## QQ plot of moderated t
 save_base("qq_t.pdf", width = 5, height = 5, {
   qqt(fit2$t[, 1], df = fit2$df.total, main = "Moderated t vs theoretical")
   abline(0, 1, col = "red")
 })
+# </figure>
 
+# <figure name="md_plot">
 ## MD plot (logFC vs mean log intensity)
 save_base("md_plot.pdf", width = 6, height = 5, {
   plotMD(fit2, coef = 1, status = tt$status[match(rownames(fit2), tt$Protein)],
          main = "ACT vs Sham", values = c("Up", "Down"), col = c("#CC0000", "#3399FF"))
   abline(h = 0, col = "grey")
 })
+# </figure>
 
+# <figure name="sa_plot">
 ## Mean-variance trend
 save_base("sa_plot.pdf", width = 6, height = 5,
           plotSA(fit2, main = "Residual SD vs mean (trend = TRUE)"))
+# </figure>
 
 ######################## Enrichment ########################
 # Universe = identified proteome after filtering, not the whole genome.
@@ -296,14 +335,22 @@ save(as.data.frame(gse_go), "gsea_GO")
 cat("GSEA GO terms (FDR < ", enr$pvalue_cutoff, "): ", nrow(gse_go), "\n", sep = "")
 
 if (nrow(gse_go) > 0) {
+  # <figure name="gsea_GO_dotplot">
   save_plot(dotplot(gse_go, showCategory = 10, split = ".sign") + facet_grid(. ~ .sign),
             "gsea_GO_dotplot.pdf", width = 11, height = 8)
+  # </figure>
+  # <figure name="gsea_GO_ridgeplot">
   save_plot(ridgeplot(gse_go, showCategory = 15) + labs(x = "signed -log10(P)"),
             "gsea_GO_ridgeplot.pdf", width = 9, height = 8)
+  # </figure>
+  # <figure name="gsea_GO_emapplot">
   gse_go_sim <- pairwise_termsim(gse_go)
   save_plot(emapplot(gse_go_sim, showCategory = 30), "gsea_GO_emapplot.pdf", width = 10, height = 9)
+  # </figure>
+  # <figure name="gsea_GO_top1">
   save_plot(gseaplot2(gse_go, geneSetID = 1, title = gse_go$Description[1], pvalue_table = TRUE),
             "gsea_GO_top1.pdf", width = 8, height = 6)
+  # </figure>
 }
 
 ## GSEA on KEGG (requires internet access to KEGG; can be disabled in the config)
@@ -316,9 +363,12 @@ if (!is.null(gse_kegg)) {
   gse_kegg <- setReadable(gse_kegg, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
   save(as.data.frame(gse_kegg), "gsea_KEGG")
   cat("GSEA KEGG pathways (FDR < ", enr$pvalue_cutoff, "): ", nrow(gse_kegg), "\n", sep = "")
-  if (nrow(gse_kegg) > 0)
+  if (nrow(gse_kegg) > 0) {
+    # <figure name="gsea_KEGG_dotplot">
     save_plot(dotplot(gse_kegg, showCategory = 10, split = ".sign") + facet_grid(. ~ .sign),
               "gsea_KEGG_dotplot.pdf", width = 11, height = 8)
+    # </figure>
+  }
 }
 
 ## ORA of up / down proteins (same significance criterion as the DE call)
@@ -329,11 +379,13 @@ ora <- compareCluster(ora_sets, fun = "enrichGO", OrgDb = org.Mm.eg.db, ont = "B
                       universe = universe, pvalueCutoff = enr$pvalue_cutoff, readable = TRUE)
 if (!is.null(ora) && nrow(as.data.frame(ora)) > 0) {
   save(as.data.frame(ora), "ora_GO_BP_up_down")
+  # <figure name="ora_GO_BP_dotplot">
   save_plot(dotplot(ora, showCategory = 10), "ora_GO_BP_dotplot.pdf", width = 9, height = 8)
+  # </figure>
 }
 
 ######################## Run summary ########################
-# Key numbers of this run, read by the HTML report (reports/*.Rmd)
+# Key numbers of this run, read by the HTML report (scripts/report.py)
 run_summary <- data.frame(
   key = c("proteins_input", "proteins_filtered", "missing_per_sample", "pca_var_explained",
           "sig_col", "sig_cutoff", "logfc_cutoff", "n_up", "n_down", "n_robust_noimp",
@@ -346,6 +398,7 @@ run_summary <- data.frame(
             nrow(gse_go), if (is.null(gse_kegg)) NA else nrow(gse_kegg),
             if (is.null(ora)) 0 else nrow(as.data.frame(ora))))
 save(run_summary, "run_summary")
-writeLines(capture.output(sessionInfo()), file.path(results_dir, "session_info.txt"))
+dir.create(cfg$reports_dir, showWarnings = FALSE)
+writeLines(capture.output(sessionInfo()), file.path(cfg$reports_dir, "sessionInfo.txt"))
 
 sessionInfo()
