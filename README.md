@@ -97,3 +97,9 @@ The R script also runs on its own: `Rscript scripts/ACT_mcelroy_limma_ijms730741
 The proteomics data come from the open-access supplementary material of McElroy et al. (2020),
 [doi:10.3390/ijms21051867](https://doi.org/10.3390/ijms21051867). Please cite the original authors when using
 these data.
+
+## License
+
+[MIT](LICENSE) © 2026 Arlindo César Matias Pereira. The license covers the code and the analysis outputs of this
+repository; the input data (`data/ijms-730741-SI.xlsx`) belong to the original authors and keep the license of
+the source article.
