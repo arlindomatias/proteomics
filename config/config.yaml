@@ -1,0 +1,28 @@
+# Parameters for the ACT vs Sham hippocampal proteomics analysis.
+# Paths are relative to the project root (proteomics/).
+
+data:
+  raw_xlsx: data/ijms-730741-SI.xlsx     # supplementary file (Table S1, raw iBAQ)
+  processed: data/processed.csv          # output of scripts/prepare.sh, input of the R script
+
+results_dir: results                     # CSV tables
+plots_dir: plots                         # PDF + PNG figures
+reports_dir: reports                     # HTML report
+
+seed: 42                                 # imputation and GSEA permutations
+
+preprocessing:
+  min_valid_per_group: 3                 # keep proteins quantified in >= n replicates of some group
+  impute_shift: 1.8                      # MinProb: mean shift (in SD) of the imputation distribution
+  impute_width: 0.3                      # MinProb: width (in SD) of the imputation distribution
+
+de:
+  fdr_cutoff: 0.05                       # BH FDR, used if any protein passes it
+  nominal_cutoff: 0.01                   # unadjusted P, fallback when nothing passes FDR
+  logfc_cutoff: 0.5                      # |log2FC|
+
+enrichment:
+  min_gs_size: 10
+  max_gs_size: 500
+  pvalue_cutoff: 0.05                    # BH-adjusted, GSEA and ORA
+  run_kegg: true                         # needs internet access to rest.kegg.jp

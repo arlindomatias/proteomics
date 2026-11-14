@@ -9,9 +9,15 @@
 #
 # Sample numbers map to groups: 100-103 = Sham, 200-203 = ACT
 # (400-403 = ACT-MnBuOE, dropped). Sample columns are renamed accordingly.
+#
+# Usage: scripts/prepare.sh [input.xlsx] [output.csv]
+# Paths are relative to the project root (the script moves there); defaults below.
 set -euo pipefail
+cd "$(dirname "$0")/.."
+in_xlsx="${1:-data/ijms-730741-SI.xlsx}"
+out_csv="${2:-data/processed.csv}"
 
-xlsx2csv -n "Table S1" ijms-730741-SI.xlsx \
+xlsx2csv -n "Table S1" "$in_xlsx" \
   | python3 -I -c '
 import csv, sys
 
@@ -27,4 +33,4 @@ out.writerow(header)
 for row in rows:
     if row and row[0]:               # skip empty trailing rows
         out.writerow(row[:14])
-' > processed.csv
+' > "$out_csv"

@@ -1,0 +1,190 @@
+---
+title: "Hippocampal proteome after ACT chemotherapy: ACT vs Sham"
+subtitle: "McElroy et al. (2020) Int. J. Mol. Sci., supplementary file ijms-730741 (raw iBAQ) — independent re-analysis"
+date: "`r format(Sys.Date())`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    self_contained: true
+params:
+  config: "config/config.yaml"
+---
+
+```{r setup, include = FALSE}
+# Rendered from the project root (see the Snakefile `report` rule), so all paths are root-relative.
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+library(yaml)
+library(knitr)
+
+cfg <- read_yaml(params$config)
+res <- function(f) file.path(cfg$results_dir, f)
+fig <- function(f) normalizePath(file.path(cfg$plots_dir, f))   # absolute: embedded by pandoc
+show_fig <- function(f) if (file.exists(file.path(cfg$plots_dir, f))) include_graphics(fig(f), rel_path = FALSE) else
+  cat("*Figure not produced in this run.*")
+
+summ <- read.csv(res("run_summary.csv"))
+S <- setNames(summ$value, summ$key)
+tt <- read.csv(res("ACT_vs_Sham_limma_all.csv"))
+de <- read.csv(res("ACT_vs_Sham_limma_DE.csv"))
+
+fmt_p <- function(x) formatC(x, format = "e", digits = 2)
+sig_label <- if (S["sig_col"] == "adj.P.Val") "BH FDR" else "unadjusted P"
+```
+
+# Design
+
+- **Tissue / model:** mouse hippocampus; ACT = doxorubicin + cyclophosphamide + paclitaxel.
+- **Contrast:** ACT vs Sham, n = 4 per group. Positive log2FC = higher in ACT. MnBuOE groups are
+  excluded on purpose (chemotherapy effect only).
+- **Input:** raw MaxQuant iBAQ from Table S1 (`r S["proteins_input"]` protein groups). Authors' normalized
+  values and statistics are not used.
+
+# Methods
+
+| Step | Setting |
+|---|---|
+| Missing values | iBAQ = 0 treated as missing |
+| Filter | ≥ `r cfg$preprocessing$min_valid_per_group` valid values in at least one group → `r S["proteins_filtered"]` proteins |
+| Transformation / normalization | log2, median centering per sample |
+| Imputation | MinProb-like: N(mean − `r cfg$preprocessing$impute_shift` SD, `r cfg$preprocessing$impute_width` SD) per sample, seed `r cfg$seed` |
+| Model | limma `~ 0 + group + batch` (batch = replicate pair 1–2 vs 3–4), `eBayes(trend = TRUE)` |
+| Significance | BH FDR < `r cfg$de$fdr_cutoff`; if nothing passes, unadjusted P < `r cfg$de$nominal_cutoff`; always \|log2FC\| > `r cfg$de$logfc_cutoff` |
+| Sensitivity | same model without imputation (limma handles NAs) |
+| Enrichment | GSEA (GO ALL, KEGG) on signed −log10(P); ORA (GO BP) of up/down sets vs the identified proteome; gene sets `r cfg$enrichment$min_gs_size`–`r cfg$enrichment$max_gs_size`, adj. P < `r cfg$enrichment$pvalue_cutoff` |
+
+# Quality control
+
+**Missing values per sample:** `r S["missing_per_sample"]`.
+
+**Variance explained by the PCs:** `r S["pca_var_explained"]`. Replicates 1–2 and 3–4 differ in depth;
+the replicate pair is modeled as a batch factor.
+
+```{r, out.width = "70%"}
+show_fig("pca.png")
+```
+
+```{r, out.width = "48%", fig.show = "hold"}
+show_fig("density_preprocessing.png")
+show_fig("boxplot_normalized.png")
+```
+
+# Differential abundance
+
+**Criterion used in this run:** `r sig_label` < `r S["sig_cutoff"]` and |log2FC| > `r S["logfc_cutoff"]`
+→ **`r S["n_up"]` up** and **`r S["n_down"]` down** in ACT
+(`r sum(tt$adj.P.Val < cfg$de$fdr_cutoff)` proteins pass FDR < `r cfg$de$fdr_cutoff` without the fold-change filter).
+
+```{r, out.width = "80%"}
+show_fig("volcano.png")
+```
+
+```{r, out.width = "60%"}
+show_fig("heatmap_DE.png")
+```
+
+## Differentially abundant proteins
+
+`robust` = the call holds in the analysis without imputation (same direction and cutoffs).
+`miss Sham` / `miss ACT` = replicates without a quantification (imputed values).
+
+```{r}
+de_tab <- de[order(-de$robust_noimp, de$status, de$P.Value),
+             c("SYMBOL", "protein_name", "status", "logFC", "P.Value", "adj.P.Val",
+               "noimp_logFC", "noimp_P.Value", "n_missing_Sham", "n_missing_ACT", "robust_noimp")]
+de_tab$protein_name <- substr(de_tab$protein_name, 1, 45)
+de_tab[, c("P.Value", "adj.P.Val", "noimp_P.Value")] <-
+  lapply(de_tab[, c("P.Value", "adj.P.Val", "noimp_P.Value")], fmt_p)
+kable(de_tab, row.names = FALSE, digits = 2,
+      col.names = c("Symbol", "Protein", "Status", "log2FC", "P", "FDR", "log2FC (no imp.)",
+                    "P (no imp.)", "miss Sham", "miss ACT", "robust"))
+```
+
+## Sensitivity to imputation
+
+`r S["n_robust_noimp"]` of `r as.integer(S["n_up"]) + as.integer(S["n_down"])` calls are robust without
+imputation; correlation of log2FC with vs without imputation: r = `r S["cor_logfc_imp_noimp"]`.
+Calls that depend on imputation are usually presence/absence patterns (protein missing in most replicates of
+one group) rather than quantitative changes.
+
+```{r, out.width = "75%"}
+show_fig("sensitivity_imputation_logFC.png")
+```
+
+## Model diagnostics
+
+```{r, out.width = "48%", fig.show = "hold"}
+show_fig("pvalue_histogram.png")
+show_fig("md_plot.png")
+show_fig("qq_t.png")
+show_fig("sa_plot.png")
+```
+
+# Enrichment
+
+## GSEA — GO
+
+`r S["n_gsea_go"]` GO terms with adj. P < `r cfg$enrichment$pvalue_cutoff`. NES > 0 = enriched among proteins
+higher in ACT.
+
+```{r}
+top_terms <- function(file, n = 15) {
+  if (!file.exists(res(file))) return(cat("*Not available in this run.*"))
+  g <- read.csv(res(file))
+  if (nrow(g) == 0) return(cat("*No significant terms.*"))
+  g <- g[order(g$p.adjust), ]
+  out <- rbind(head(g[g$NES > 0, ], n), head(g[g$NES < 0, ], n))
+  cols <- intersect(c("ONTOLOGY", "Description", "setSize", "NES", "p.adjust"), names(out))
+  out$p.adjust <- fmt_p(out$p.adjust)
+  kable(out[, cols], row.names = FALSE, digits = 2)
+}
+top_terms("gsea_GO.csv")
+```
+
+```{r, out.width = "90%"}
+show_fig("gsea_GO_dotplot.png")
+```
+
+```{r, out.width = "48%", fig.show = "hold"}
+show_fig("gsea_GO_ridgeplot.png")
+show_fig("gsea_GO_emapplot.png")
+```
+
+## GSEA — KEGG
+
+```{r}
+top_terms("gsea_KEGG.csv")
+```
+
+```{r, out.width = "90%"}
+show_fig("gsea_KEGG_dotplot.png")
+```
+
+## ORA — GO BP (up / down sets)
+
+```{r}
+if (file.exists(res("ora_GO_BP_up_down.csv")) && as.integer(S["n_ora"]) > 0) {
+  o <- read.csv(res("ora_GO_BP_up_down.csv"))
+  o$p.adjust <- fmt_p(o$p.adjust)
+  kable(head(o[order(o$Cluster, o$p.adjust), c("Cluster", "Description", "GeneRatio", "p.adjust", "geneID")], 30),
+        row.names = FALSE)
+} else cat("*No significant terms for the up/down sets (few proteins against a background of the whole identified proteome).*")
+```
+
+# Reproducibility
+
+Parameters (`config/config.yaml`):
+
+```{r, comment = ""}
+cat(readLines(params$config), sep = "\n")
+```
+
+<details><summary>Session info of the analysis run</summary>
+
+```{r, comment = ""}
+cat(readLines(res("session_info.txt")), sep = "\n")
+```
+
+</details>

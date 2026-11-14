@@ -1,0 +1,10 @@
+# HTML report (scripts/report_*.Rmd rendered with rmarkdown)
+name: proteomics-report
+channels:
+  - conda-forge
+dependencies:
+  - r-base>=4.4
+  - r-rmarkdown
+  - r-knitr
+  - r-yaml
+  - pandoc

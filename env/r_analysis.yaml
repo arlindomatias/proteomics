@@ -1,0 +1,19 @@
+# Differential abundance (limma), plots and enrichment (scripts/*.R)
+name: proteomics-r
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base>=4.4
+  - r-yaml
+  - r-dplyr
+  - r-tidyr
+  - r-ggplot2
+  - r-ggrepel
+  - r-pheatmap
+  - bioconductor-limma
+  - bioconductor-enhancedvolcano
+  - bioconductor-clusterprofiler
+  - bioconductor-enrichplot
+  - bioconductor-dose
+  - bioconductor-org.mm.eg.db

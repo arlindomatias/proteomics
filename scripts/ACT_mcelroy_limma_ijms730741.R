@@ -2,7 +2,9 @@
 # Hippocampal proteome after ACT chemotherapy (doxorubicin + cyclophosphamide + paclitaxel)
 # McElroy et al. (2020) Int. J. Mol. Sci. -- supplementary file ijms-730741 (Table S1, raw iBAQ)
 # Contrast: ACT vs Sham (n = 4 per group). Positive logFC = higher in ACT.
-# Input: processed.csv (built by prepare.sh). Run from this folder.
+# Input: data/processed.csv (built by scripts/prepare.sh). Parameters: config/config.yaml.
+# Usage: `Rscript scripts/<this>.R [config/config.yaml]` (or via `snakemake`). Paths are relative
+# to the project root (proteomics/); for interactive use, set the working directory there.
 ################################################################
 
 ######################## Packages ########################
@@ -18,36 +20,59 @@ suppressPackageStartupMessages({
   library(org.Mm.eg.db)
   library(enrichplot)
   library(DOSE)
+  library(yaml)
 })
 
 ######################## Adjusts ########################
-set.seed(42)                      # imputation is stochastic
+# Move to the project root when run with Rscript (no-op in interactive sessions)
+script_arg <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))
+if (length(script_arg) == 1) setwd(file.path(dirname(normalizePath(script_arg)), ".."))
+
+# Parameters: first command-line argument, default config/config.yaml
+args <- commandArgs(trailingOnly = TRUE)
+cfg <- read_yaml(if (length(args) >= 1) args[1] else "config/config.yaml")
+results_dir <- cfg$results_dir
+plots_dir   <- cfg$plots_dir
+
+set.seed(cfg$seed)                # imputation is stochastic
 options(scipen = 0)
 palette(c("#3399FF", "#CC0000", "#66A61E"))
 group_colors <- c(Sham = "#3399FF", ACT = "#CC0000")
 
-dir.create("results", showWarnings = FALSE)
-dir.create("figures", showWarnings = FALSE)
+dir.create(results_dir, showWarnings = FALSE)   # tables
+dir.create(plots_dir, showWarnings = FALSE)     # figures
 
 # Save a table as CSV, adding the extension if missing
 save <- function(table, file_name) {
   if (!grepl("\\.csv$", file_name, ignore.case = TRUE)) file_name <- paste0(file_name, ".csv")
-  write.csv(table, file = file.path("results", file_name), row.names = FALSE)
+  write.csv(table, file = file.path(results_dir, file_name), row.names = FALSE)
 }
 
-# Save a ggplot / base plot to figures/
+# Save a ggplot to the plots folder as PDF (for print) and PNG (embedded in the HTML report)
 save_plot <- function(plot, file_name, width = 7, height = 6) {
-  ggsave(file.path("figures", file_name), plot, width = width, height = height)
+  ggsave(file.path(plots_dir, file_name), plot, width = width, height = height)
+  ggsave(file.path(plots_dir, sub("\\.pdf$", ".png", file_name)), plot,
+         width = width, height = height, dpi = 120)
+}
+
+# Same for base-graphics plots: `code` is evaluated once per device
+save_base <- function(file_name, width, height, code) {
+  code <- substitute(code); env <- parent.frame()
+  pdf(file.path(plots_dir, file_name), width = width, height = height)
+  eval(code, env); invisible(dev.off())
+  png(file.path(plots_dir, sub("\\.pdf$", ".png", file_name)),
+      width = width, height = height, units = "in", res = 120)
+  eval(code, env); invisible(dev.off())
 }
 
 # Thresholds for calling a protein differentially abundant:
-# BH FDR < 0.05 first; if nothing passes, fall back to unadjusted P < 0.01.
-fdr_cutoff     <- 0.05
-nominal_cutoff <- 0.01
-fc_cutoff      <- 0.5    # |log2FC|
+# BH FDR first; if nothing passes, fall back to unadjusted P.
+fdr_cutoff     <- cfg$de$fdr_cutoff
+nominal_cutoff <- cfg$de$nominal_cutoff
+fc_cutoff      <- cfg$de$logfc_cutoff    # |log2FC|
 
 ######################## Import Data ########################
-raw <- read.csv("processed.csv", check.names = FALSE)
+raw <- read.csv(cfg$data$processed, check.names = FALSE)
 
 sample_cols <- grep("^(Sham|ACT)_", colnames(raw), value = TRUE)
 annotation <- raw %>%
@@ -75,10 +100,10 @@ log_int <- log2(intensity)
 missing_per_sample <- colSums(is.na(log_int))
 print(missing_per_sample)
 
-## Filter: valid values in >= 3 of 4 replicates in at least one group
+## Filter: valid values in >= min_valid replicates in at least one group
 valid_by_group <- sapply(levels(metadata$group), function(g)
   rowSums(!is.na(log_int[, metadata$group == g, drop = FALSE])))
-keep <- apply(valid_by_group >= 3, 1, any)
+keep <- apply(valid_by_group >= cfg$preprocessing$min_valid_per_group, 1, any)
 log_filt <- log_int[keep, ]
 cat("Proteins kept after valid-value filter:", nrow(log_filt), "of", nrow(log_int), "\n")
 
@@ -87,7 +112,7 @@ sample_medians <- apply(log_filt, 2, median, na.rm = TRUE)
 log_norm <- sweep(log_filt, 2, sample_medians - median(sample_medians))
 
 ## Imputation: MinProb-style left-censored draws (missing values assumed MNAR, i.e. below
-## detection). Per sample: N(mean - 1.8 * sd, 0.3 * sd), as in Perseus.
+## detection). Per sample: N(mean - shift * sd, width * sd); Perseus default 1.8 / 0.3.
 impute_minprob <- function(m, shift = 1.8, width = 0.3) {
   for (j in seq_len(ncol(m))) {
     miss <- is.na(m[, j])
@@ -96,7 +121,8 @@ impute_minprob <- function(m, shift = 1.8, width = 0.3) {
   }
   m
 }
-log_imp <- impute_minprob(log_norm)
+log_imp <- impute_minprob(log_norm, shift = cfg$preprocessing$impute_shift,
+                          width = cfg$preprocessing$impute_width)
 
 ## Densities before / after normalization and imputation
 long <- function(m, stage) data.frame(m, check.names = FALSE) %>%
@@ -141,11 +167,11 @@ fit2 <- eBayes(contrasts.fit(fit, contrast), trend = TRUE)
 tt <- topTable(fit2, coef = "ACT_vs_Sham", number = Inf, sort.by = "P")
 tt$Protein <- rownames(tt)
 tt <- left_join(tt, annotation, by = "Protein") %>%
-  mutate(n_missing_Sham = valid_by_group[Protein, "Sham"] %>% {4 - .},
-         n_missing_ACT  = valid_by_group[Protein, "ACT"]  %>% {4 - .}) %>%
+  mutate(n_missing_Sham = sum(metadata$group == "Sham") - valid_by_group[Protein, "Sham"],
+         n_missing_ACT  = sum(metadata$group == "ACT")  - valid_by_group[Protein, "ACT"]) %>%
   relocate(Protein, SYMBOL, protein_name)
 
-# Significance column: FDR if anything passes it, otherwise unadjusted P < 0.01
+# Significance column: FDR if anything passes it, otherwise unadjusted P
 if (any(tt$adj.P.Val < fdr_cutoff & abs(tt$logFC) > fc_cutoff)) {
   sig_col <- "adj.P.Val"; sig_cutoff <- fdr_cutoff
 } else {
@@ -215,37 +241,36 @@ save_plot(p_volc, "volcano.pdf", width = 9, height = 8)
 top_ids <- c(tt_up$Protein, tt_down$Protein)
 hm <- log_imp[top_ids, ]
 rownames(hm) <- make.unique(tt$SYMBOL[match(top_ids, tt$Protein)])
-pdf("figures/heatmap_DE.pdf", width = 6, height = max(5, 0.15 * length(top_ids) + 2))
-pheatmap(hm, scale = "row", cluster_cols = FALSE,
-         annotation_col = metadata[, c("group", "batch")],
-         annotation_colors = list(group = group_colors),
-         main = paste0("DE proteins (", sig_col, " < ", sig_cutoff, ")"))
-dev.off()
+save_base("heatmap_DE.pdf", width = 6, height = max(5, 0.15 * length(top_ids) + 2), {
+  print(pheatmap(hm, scale = "row", cluster_cols = FALSE, silent = TRUE,
+                 annotation_col = metadata[, c("group", "batch")],
+                 annotation_colors = list(group = group_colors),
+                 main = paste0("DE proteins (", sig_col, " < ", sig_cutoff, ")")))
+})
 
 ## P value / FDR histogram
-pdf("figures/pvalue_histogram.pdf", width = 8, height = 4)
-par(mfrow = c(1, 2))
-hist(tt$P.Value, breaks = 50, col = "grey", main = "P value", xlab = "P")
-hist(tt$adj.P.Val, breaks = 50, col = "grey", main = "FDR (BH)", xlab = "adj. P")
-dev.off()
+save_base("pvalue_histogram.pdf", width = 8, height = 4, {
+  par(mfrow = c(1, 2))
+  hist(tt$P.Value, breaks = 50, col = "grey", main = "P value", xlab = "P")
+  hist(tt$adj.P.Val, breaks = 50, col = "grey", main = "FDR (BH)", xlab = "adj. P")
+})
 
 ## QQ plot of moderated t
-pdf("figures/qq_t.pdf", width = 5, height = 5)
-qqt(fit2$t[, 1], df = fit2$df.total, main = "Moderated t vs theoretical")
-abline(0, 1, col = "red")
-dev.off()
+save_base("qq_t.pdf", width = 5, height = 5, {
+  qqt(fit2$t[, 1], df = fit2$df.total, main = "Moderated t vs theoretical")
+  abline(0, 1, col = "red")
+})
 
 ## MD plot (logFC vs mean log intensity)
-pdf("figures/md_plot.pdf", width = 6, height = 5)
-plotMD(fit2, coef = 1, status = tt$status[match(rownames(fit2), tt$Protein)],
-       main = "ACT vs Sham", values = c("Up", "Down"), col = c("#CC0000", "#3399FF"))
-abline(h = 0, col = "grey")
-dev.off()
+save_base("md_plot.pdf", width = 6, height = 5, {
+  plotMD(fit2, coef = 1, status = tt$status[match(rownames(fit2), tt$Protein)],
+         main = "ACT vs Sham", values = c("Up", "Down"), col = c("#CC0000", "#3399FF"))
+  abline(h = 0, col = "grey")
+})
 
 ## Mean-variance trend
-pdf("figures/sa_plot.pdf", width = 6, height = 5)
-plotSA(fit2, main = "Residual SD vs mean (trend = TRUE)")
-dev.off()
+save_base("sa_plot.pdf", width = 6, height = 5,
+          plotSA(fit2, main = "Residual SD vs mean (trend = TRUE)"))
 
 ######################## Enrichment ########################
 # Universe = identified proteome after filtering, not the whole genome.
@@ -261,13 +286,14 @@ names(gene_list) <- tt_entrez$ENTREZID
 gene_list <- sort(gene_list, decreasing = TRUE)
 
 ## GSEA on GO (permutation-based: reseed so results do not depend on earlier random draws)
-set.seed(42)
+enr <- cfg$enrichment
+set.seed(cfg$seed)
 gse_go <- gseGO(geneList = gene_list, ont = "ALL", keyType = "ENTREZID",
-                OrgDb = org.Mm.eg.db, minGSSize = 10, maxGSSize = 500,
-                pvalueCutoff = 0.05, pAdjustMethod = "BH", eps = 0, verbose = FALSE)
+                OrgDb = org.Mm.eg.db, minGSSize = enr$min_gs_size, maxGSSize = enr$max_gs_size,
+                pvalueCutoff = enr$pvalue_cutoff, pAdjustMethod = "BH", eps = 0, verbose = FALSE)
 gse_go <- setReadable(gse_go, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
 save(as.data.frame(gse_go), "gsea_GO")
-cat("GSEA GO terms (FDR < 0.05):", nrow(gse_go), "\n")
+cat("GSEA GO terms (FDR < ", enr$pvalue_cutoff, "): ", nrow(gse_go), "\n", sep = "")
 
 if (nrow(gse_go) > 0) {
   save_plot(dotplot(gse_go, showCategory = 10, split = ".sign") + facet_grid(. ~ .sign),
@@ -280,15 +306,16 @@ if (nrow(gse_go) > 0) {
             "gsea_GO_top1.pdf", width = 8, height = 6)
 }
 
-## GSEA on KEGG (requires internet access to KEGG)
-gse_kegg <- tryCatch(
+## GSEA on KEGG (requires internet access to KEGG; can be disabled in the config)
+gse_kegg <- if (!isTRUE(enr$run_kegg)) NULL else tryCatch(
   gseKEGG(geneList = gene_list, organism = "mmu", keyType = "ncbi-geneid",
-          minGSSize = 10, maxGSSize = 500, pvalueCutoff = 0.05, eps = 0, verbose = FALSE),
+          minGSSize = enr$min_gs_size, maxGSSize = enr$max_gs_size,
+          pvalueCutoff = enr$pvalue_cutoff, eps = 0, verbose = FALSE),
   error = function(e) { message("KEGG skipped: ", conditionMessage(e)); NULL })
 if (!is.null(gse_kegg)) {
   gse_kegg <- setReadable(gse_kegg, OrgDb = org.Mm.eg.db, keyType = "ENTREZID")
   save(as.data.frame(gse_kegg), "gsea_KEGG")
-  cat("GSEA KEGG pathways (FDR < 0.05):", nrow(gse_kegg), "\n")
+  cat("GSEA KEGG pathways (FDR < ", enr$pvalue_cutoff, "): ", nrow(gse_kegg), "\n", sep = "")
   if (nrow(gse_kegg) > 0)
     save_plot(dotplot(gse_kegg, showCategory = 10, split = ".sign") + facet_grid(. ~ .sign),
               "gsea_KEGG_dotplot.pdf", width = 11, height = 8)
@@ -299,10 +326,26 @@ ora_sets <- list(
   up   = tt_entrez$ENTREZID[tt_entrez$status == "Up"],
   down = tt_entrez$ENTREZID[tt_entrez$status == "Down"])
 ora <- compareCluster(ora_sets, fun = "enrichGO", OrgDb = org.Mm.eg.db, ont = "BP",
-                      universe = universe, pvalueCutoff = 0.05, readable = TRUE)
+                      universe = universe, pvalueCutoff = enr$pvalue_cutoff, readable = TRUE)
 if (!is.null(ora) && nrow(as.data.frame(ora)) > 0) {
   save(as.data.frame(ora), "ora_GO_BP_up_down")
   save_plot(dotplot(ora, showCategory = 10), "ora_GO_BP_dotplot.pdf", width = 9, height = 8)
 }
+
+######################## Run summary ########################
+# Key numbers of this run, read by the HTML report (reports/*.Rmd)
+run_summary <- data.frame(
+  key = c("proteins_input", "proteins_filtered", "missing_per_sample", "pca_var_explained",
+          "sig_col", "sig_cutoff", "logfc_cutoff", "n_up", "n_down", "n_robust_noimp",
+          "cor_logfc_imp_noimp", "n_gsea_go", "n_gsea_kegg", "n_ora"),
+  value = c(nrow(log_int), nrow(log_filt),
+            paste(names(missing_per_sample), missing_per_sample, sep = "=", collapse = "; "),
+            paste0("PC", 1:4, "=", var_expl[1:4], "%", collapse = "; "),
+            sig_col, sig_cutoff, fc_cutoff, nrow(tt_up), nrow(tt_down), sum(tt$robust_noimp),
+            round(cor(tt$logFC, tt$noimp_logFC, use = "complete.obs"), 3),
+            nrow(gse_go), if (is.null(gse_kegg)) NA else nrow(gse_kegg),
+            if (is.null(ora)) 0 else nrow(as.data.frame(ora))))
+save(run_summary, "run_summary")
+writeLines(capture.output(sessionInfo()), file.path(results_dir, "session_info.txt"))
 
 sessionInfo()

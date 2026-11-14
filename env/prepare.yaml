@@ -1,0 +1,7 @@
+# Data preparation: xlsx -> CSV (scripts/prepare.sh)
+name: proteomics-prepare
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - xlsx2csv

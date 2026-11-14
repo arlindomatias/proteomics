@@ -1,0 +1,22 @@
+# R session / IDE artifacts
+.Rhistory
+.RData
+.Rproj.user/
+*.Rproj
+Rplots.pdf
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+*~
+
+# Temporary and cache files
+*.tmp
+*.log
+cache/
+tmp/
+
+# Snakemake
+.snakemake/
+logs/
