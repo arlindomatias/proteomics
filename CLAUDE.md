@@ -1,6 +1,9 @@
 # proteomics
 
-Differential protein abundance analysis of public label-free proteomics datasets (mouse). Like `../rna_seq`,
+Repository `arlindomatias/proteomics` (public; local clone `~/github/proteomics`). Differential protein abundance
+analysis of public label-free proteomics datasets (mouse). It started as a folder of the private repository
+(`~/github/private/proteomics`, history kept) and follows the conventions of `~/github/bulk-rna-seq`. Like the
+R scripts in `~/github/private/rna_seq`,
 there is **one self-contained R script per dataset**, which can be run interactively section by section; a
 Snakemake workflow chains the steps (`prepare` -> `limma_analysis` -> `report`) with parameters in `config/config.yaml`
 and conda environments in `env/`.
@@ -76,7 +79,7 @@ snakemake -n                                                # dry run
   to `proteomics/`.
 - `data/` holds only inputs and intermediates; never write results or plots there.
 
-- Script naming mirrors `rna_seq` (e.g. `ACT_cronin_DESeq2_GSE295281.R`):
+- Script naming mirrors `~/github/private/rna_seq` (e.g. `ACT_cronin_DESeq2_GSE295281.R`):
   `<model>_<firstauthor>_<method>_<accession>.R`; for the current dataset: `ACT_mcelroy_limma_ijms730741.R`.
   Use the PRIDE accession (`PXD...`) when one exists, otherwise the article id (`ijms-730741`).
 - Data preparation (xlsx/raw -> CSV) is done in Bash (`scripts/prepare.sh`), with inline Python only when Bash is not
@@ -88,9 +91,13 @@ snakemake -n                                                # dry run
 
 - Source: McElroy et al. (2020), "Assessing the Effects of Redox Modifier MnTnBuOE-2-PyP 5+ on Cognition and
   Hippocampal Physiology Following Doxorubicin, Cyclophosphamide, and Paclitaxel Treatment", *Int. J. Mol. Sci.*
-  (published 9 March 2020). Supplementary file id: `ijms-730741`.
+  21(5):1867, doi:10.3390/ijms21051867, PMID 32182883, PMC7084440 (open access). Supplementary file id:
+  `ijms-730741`. No PRIDE accession is known.
+- Mice: 4-month-old female C57BL/6, hippocampus collected about 4 weeks after chemotherapy (after the
+  Morris water maze).
 - Mouse **hippocampus**; ACT = doxorubicin (A) + cyclophosphamide (C) + paclitaxel (T) chemotherapy, the same
-  model as `../rna_seq/ACT_cronin_DESeq2_GSE295281.R`.
+  model as GSE295281 in `~/github/bulk-rna-seq` (`bulk_rna_seq_tximport`) and
+  `~/github/private/rna_seq/ACT_cronin_DESeq2_GSE295281.R`.
 - MaxQuant output, **iBAQ** intensities. Groups in the study: Sham (sample ids 100-103),
   ACT (200-203), MnBuOE (300-303), ACT-MnBuOE (400-403); n = 4 per group.
 - Table S1: annotation + raw iBAQ + normalized values, followed by two limma result blocks (not row-aligned).
@@ -109,7 +116,7 @@ snakemake -n                                                # dry run
 
 ## Analysis script structure
 
-Same section order as the `rna_seq` limma scripts, with `######################## Section ########################`
+Same section order as the `~/github/private/rna_seq` limma scripts, with `######################## Section ########################`
 headers and `## Subsection` for plots:
 
 1. **Packages** — `limma`, `dplyr`, `tidyr`, `ggplot2`, `ggrepel`, `yaml`, `clusterProfiler`, `org.Mm.eg.db`, `enrichplot`, `EnhancedVolcano`,
@@ -137,7 +144,7 @@ headers and `## Subsection` for plots:
 
 ## Conventions
 
-- All code, comments and section headers in **English** (translate Portuguese when copying from `rna_seq`).
+- All code, comments and section headers in **English** (translate Portuguese when copying from `~/github/private/rna_seq`).
 - Relative paths only (no `C:/Users/...` or absolute home paths). Tables go to `results/` (via `save()`),
   figures to `plots/` (via `save_plot()` / `save_base()`), `report.html` and `sessionInfo.txt` to `reports/`.
 - Run R scripts with `Rscript scripts/<script>.R` for a full run; interactive use in RStudio is also expected.

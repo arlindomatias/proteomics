@@ -74,9 +74,10 @@ rule report:
         title="Hippocampal proteome: ACT vs Sham",
         subtitle=config["title"],
         design="""
-Hippocampus of mice after ACT chemotherapy (doxorubicin + cyclophosphamide, then paclitaxel) or sham
-treatment. Label-free LC-MS/MS quantified with MaxQuant (iBAQ). Data from the supplementary file of
-McElroy et al. (2020), *Int. J. Mol. Sci.* (`ijms-730741`, Table S1).
+Hippocampus of 4-month-old female C57BL/6 mice, about four weeks after ACT chemotherapy (doxorubicin +
+cyclophosphamide, then paclitaxel) or sham treatment. Label-free LC-MS/MS quantified with MaxQuant (iBAQ).
+Data from Table S1 of the supplementary file (`ijms-730741`) of McElroy et al. (2020),
+[*Int. J. Mol. Sci.* 21(5):1867](https://doi.org/10.3390/ijms21051867), PMID 32182883.
 """,
         notes="""
 > **Independent re-analysis.** Only the raw iBAQ values are used. The authors' normalized values, statistics
